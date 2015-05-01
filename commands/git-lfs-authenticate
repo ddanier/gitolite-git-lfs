@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+use lib $ENV{GL_LIBDIR};
+use Gitolite::Easy;
+use Gitolite::Rc;
+
+use LWP::UserAgent;
+use JSON;
+
+=for usage
+git-lfs-authenticate -- Initialite access to Git LFS storage
+
+Usage summary:
+    ssh git@github.com git-lfs-authenticate user/repo.git upload {oid}
+        # Initialize upload access to {oid} file download on
+        # user/repo.git repository
+    ssh git@github.com git-lfs-authenticate user/repo.git download {oid}
+        # Initialize download access to {oid} file download on
+        # user/repo.git repository
+
+Hint:
+    You normally do not need to call this by yourself. git-lfs will
+    take care of everything.
+=cut
+
+usage() if not @ARGV or $ARGV[0] eq '-h';
+
+$rc{LFS_URL} or _die "Please setup LFS_URL in .gitolite.rc first";
+$rc{LFS_TOKEN} or _die "Please setup LFS_TOKEN in .gitolite.rc first";
+$ENV{GL_USER} or _die "GL_USER not set";
+
+my $generic_error = "repo does not exist, or you are not authorised";
+
+if ( @ARGV != 3 ) {
+	_die "Invalid command line options";
+}
+
+my $repo = $ARGV[0];
+my $operation = $ARGV[1];
+my $oid = $ARGV[2];
+
+# Check permissions
+if ($operation eq "upload") {
+	if (!can_write($repo)) {
+		_die $generic_error;
+	}
+}
+elsif ($operation eq "download") {
+	if (!can_read($repo)) {
+		_die $generic_error;
+	}
+} else {
+	_die "Invalid operation supplied";
+}
+
+# Make sure oid seems valid
+if (!($oid =~ /[0-9a-f]{64}/)) {
+	_die $generic_error;
+}
+
+my $client = LWP::UserAgent->new;
+my $request = HTTP::Request->new(POST => $rc{LFS_URL} . "perms");
+$request->header("X-Git-LFS-Perms-Token" => $rc{LFS_TOKEN});
+$request->content(encode_json({
+	user => $ENV{GL_USER},
+	repository => $repo,
+	operation => $operation,
+	oid => $oid
+}));
+my $response = $client->request($request);
+if ($response->is_success) {
+	print $response->content;
+} else {
+	_die "Server communication failed";
+}
