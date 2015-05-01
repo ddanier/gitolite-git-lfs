@@ -61,7 +61,7 @@ if (!($oid =~ /[0-9a-f]{64}/)) {
 }
 
 my $client = LWP::UserAgent->new;
-my $request = HTTP::Request->new(POST => $rc{LFS_URL} . "perms");
+my $request = HTTP::Request->new(POST => $rc{LFS_URL});
 $request->header("X-Git-LFS-Perms-Token" => $rc{LFS_TOKEN});
 $request->content(encode_json({
 	user => $ENV{GL_USER},
@@ -73,5 +73,7 @@ my $response = $client->request($request);
 if ($response->is_success) {
 	print $response->content;
 } else {
+	# TODO: Give some more background information. Perhaps the server
+	#       could return some error message.
 	_die "Server communication failed";
 }
